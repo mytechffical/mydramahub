@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import SiteHeader from "@/components/SiteHeader";
 import DramaCard from "@/components/DramaCard";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const [featured, latest] = await Promise.all([
     prisma.drama.findFirst({ where:{status:"PUBLISHED",featured:true}, include:{genre:true} }),
