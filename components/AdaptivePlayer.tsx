@@ -1,9 +1,46 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
+// A URL counts as a direct playable file only if it points at an actual
+// media file. Anything else (ok.ru, YouTube, Vimeo, Dailymotion links, etc.)
+// is an embed page meant to sit inside an <iframe>, not a <video src>.
+function isDirectFileUrl(url: string) {
+  return /\.(mp4|webm|mov|m3u8)(\?.*)?$/i.test(url);
+}
+
+// Normalize a few common share-link formats into their embeddable form,
+// so pasting the regular "watch" link still works.
+function toEmbedUrl(url: string) {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("youtube.com") && u.pathname === "/watch" && u.searchParams.get("v")) {
+      return `https://www.youtube.com/embed/${u.searchParams.get("v")}`;
+    }
+    if (u.hostname === "youtu.be") {
+      return `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
+    }
+    if (u.hostname.includes("vimeo.com") && !u.pathname.includes("/embed/")) {
+      const id = u.pathname.split("/").filter(Boolean).pop();
+      if (id) return `https://player.vimeo.com/video/${id}`;
+    }
+    if (u.hostname.includes("ok.ru") && u.pathname.startsWith("/video/")) {
+      return url.replace("/video/", "/videoembed/");
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 export default function AdaptivePlayer({hlsUrl,fallbackUrl,poster,subtitleUrl,episodeId}:{hlsUrl?:string|null;fallbackUrl?:string|null;poster?:string|null;subtitleUrl?:string|null;episodeId:number}){
   const ref=useRef<HTMLVideoElement>(null); const [error,setError]=useState("");
+
+  // If there's no direct/HLS file, but there is a fallback URL, treat it as
+  // an embed and render it in an iframe instead of the <video> element.
+  const useEmbed = !hlsUrl && !!fallbackUrl && !isDirectFileUrl(fallbackUrl);
+
   useEffect(()=>{
+    if(useEmbed) return;
     let hls:any; let cancelled=false; const v=ref.current; if(!v)return;
     setError("");
 
@@ -33,6 +70,18 @@ export default function AdaptivePlayer({hlsUrl,fallbackUrl,poster,subtitleUrl,ep
       v.removeEventListener("timeupdate",save);
       hls?.destroy();
     };
-  },[hlsUrl,fallbackUrl,episodeId]);
+  },[hlsUrl,fallbackUrl,episodeId,useEmbed]);
+
+  if (useEmbed) {
+    return <div style={{position:"relative",aspectRatio:"16/9"}}>
+      <iframe
+        src={toEmbedUrl(fallbackUrl!)}
+        style={{position:"absolute",inset:0,width:"100%",height:"100%",border:0}}
+        allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+        allowFullScreen
+      />
+    </div>;
+  }
+
   return <div style={{position:"relative"}}><video ref={ref} controls playsInline preload="metadata" poster={poster||undefined} className="video">{subtitleUrl&&<track kind="subtitles" src={subtitleUrl} srcLang="en" label="English" default/>}</video>{error&&<div style={{position:"absolute",inset:0,display:"grid",placeItems:"center",background:"rgba(0,0,0,.8)",padding:20,textAlign:"center"}}>{error}</div>}</div>;
 }
