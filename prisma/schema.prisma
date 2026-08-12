@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ProcessingStatus {
+  NONE
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+}
+
+model AdminUser {
+  id           Int             @id @default(autoincrement())
+  email        String          @unique
+  passwordHash String
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  sessions     AdminSession[]
+}
+
+model AdminSession {
+  id        Int       @id @default(autoincrement())
+  adminId   Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model Genre {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  dramas    Drama[]
+}
+
+model Drama {
+  id          Int           @id @default(autoincrement())
+  title       String
+  slug        String        @unique
+  description String        @db.Text
+  posterUrl   String?
+  bannerUrl   String?
+  status      PublishStatus @default(DRAFT)
+  featured    Boolean       @default(false)
+  genreId     Int?
+  genre       Genre?        @relation(fields: [genreId], references: [id], onDelete: SetNull)
+  episodes    Episode[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, featured])
+  @@index([genreId])
+}
+
+model Episode {
+  id              Int              @id @default(autoincrement())
+  dramaId         Int
+  drama           Drama            @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  number          Int
+  title           String
+  description     String           @db.Text
+  videoUrl        String?
+  hlsUrl          String?
+  thumbnailUrl    String?
+  subtitleUrl     String?
+  duration        Int?
+  status          PublishStatus    @default(DRAFT)
+  processingStatus ProcessingStatus @default(NONE)
+  processingError String?          @db.Text
+  views           Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([dramaId, number])
+  @@index([dramaId, status, number])
+  @@index([status, updatedAt])
+}

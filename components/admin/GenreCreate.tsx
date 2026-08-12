@@ -1,0 +1,4 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+export default function GenreCreate(){const[n,setN]=useState("");const[err,setErr]=useState("");const[busy,setBusy]=useState(false);const router=useRouter();async function go(e:React.FormEvent){e.preventDefault();setBusy(true);setErr("");const r=await fetch("/api/admin/genres",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n})});const d=await r.json().catch(()=>({}));setBusy(false);if(!r.ok){setErr(d.error||"Failed");return}setN("");setErr("");router.refresh()}return <form onSubmit={go} className="row gap-2" style={{maxWidth:500,marginTop:15}}><input className="input" style={{color:"#111",background:"#fff"}} placeholder="New genre" value={n} onChange={e=>setN(e.target.value)} required/><button className="btn btn-red" disabled={busy}>{busy?"Adding…":"Add"}</button>{err&&<span style={{color:"#b91c1c"}}>{err}</span>}</form>}

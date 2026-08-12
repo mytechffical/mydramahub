@@ -1,0 +1,3 @@
+import { prisma } from "@/lib/prisma";
+import GenreCreate from "@/components/admin/GenreCreate";
+export default async function Genres(){const genres=await prisma.genre.findMany({orderBy:{name:"asc"},include:{_count:{select:{dramas:true}}}});return <section className="admin-content"><h1>Genres</h1><GenreCreate/><div className="card" style={{marginTop:20,background:"#fff",overflow:"auto"}}><table className="table"><thead><tr><th>Name</th><th>Slug</th><th>Dramas</th></tr></thead><tbody>{genres.map(g=><tr key={g.id}><td>{g.name}</td><td>{g.slug}</td><td>{g._count.dramas}</td></tr>)}</tbody></table></div></section>}

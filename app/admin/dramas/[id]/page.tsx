@@ -1,0 +1,5 @@
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import DramaForm from "@/components/admin/DramaForm";
+import Link from "next/link";
+export default async function EditDrama({params}:{params:Promise<{id:string}>}){const {id}=await params;const idNum=Number(id);if(!Number.isInteger(idNum))notFound();const d=await prisma.drama.findUnique({where:{id:idNum},include:{episodes:{orderBy:{number:"asc"}}}});if(!d)notFound();const genres=await prisma.genre.findMany({orderBy:{name:"asc"}});return <section className="admin-content"><div className="row" style={{justifyContent:"space-between"}}><h1>Edit: {d.title}</h1><Link className="btn btn-dark" href={`/admin/dramas/${d.id}/episodes/new`}>+ Add episode</Link></div><DramaForm genres={genres} drama={d}/><div style={{marginTop:35}}><h2>Episodes</h2><div className="space-y-2">{d.episodes.map(e=><Link key={e.id} href={`/admin/episodes/${e.id}`} className="card row" style={{padding:14,gap:12,background:"#fff"}}><b>#{e.number}</b><span>{e.title}</span><span style={{marginLeft:"auto",color:"#888"}}>{e.status}</span></Link>)}</div></div></section>}
