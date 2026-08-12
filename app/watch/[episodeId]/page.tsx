@@ -5,6 +5,8 @@ import SiteHeader from "@/components/SiteHeader";
 import AdaptivePlayer from "@/components/AdaptivePlayer";
 import { description, sanitizeHtml } from "@/lib/html";
 
+export const dynamic = "force-dynamic";
+
 export default async function Watch({params}:{params:Promise<{episodeId:string}>}){
   const {episodeId}=await params; const id=Number(episodeId); if(!Number.isInteger(id))notFound();
   const e=await prisma.episode.findFirst({where:{id,status:"PUBLISHED",drama:{status:"PUBLISHED"}},include:{drama:{select:{title:true,slug:true,episodes:{where:{status:"PUBLISHED"},orderBy:{number:"asc"},select:{id:true,number:true,title:true}}}}}});
