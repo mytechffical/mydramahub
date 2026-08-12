@@ -6,6 +6,8 @@ import SiteHeader from "@/components/SiteHeader";
 import { description, sanitizeHtml } from "@/lib/html";
 import { siteUrl } from "@/lib/seo";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({params}:{params:Promise<{slug:string}>}):Promise<Metadata>{
   const {slug}=await params; const d=await prisma.drama.findFirst({where:{slug,status:"PUBLISHED"},select:{title:true,description:true,posterUrl:true}});
   if(!d)return{}; return {title:d.title,description:description(d.description),alternates:{canonical:siteUrl(`/drama/${slug}`)},openGraph:{title:d.title,description:description(d.description),images:d.posterUrl?[{url:d.posterUrl}]:[]}};
