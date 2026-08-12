@@ -17,7 +17,7 @@ if (!email || !password || password.length < 12) {
   process.exit(1);
 }
 
-async function main() {
+async function main(email: string, password: string) {
   await prisma.adminUser.upsert({
     where: { email },
     update: { passwordHash: hashPassword(password), active: true },
@@ -28,4 +28,4 @@ async function main() {
   await prisma.$disconnect();
 }
 
-main();
+main(email, password);
