@@ -52,7 +52,7 @@ export default async function Home() {
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
     <SiteHeader />
     <HeroCarousel slides={slides} />
-    <section className="container" style={{ padding: "35px 0 60px" }}>
+    <section className="container" style={{ padding: "clamp(16px,5vw,35px) 0 60px" }}>
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}><h2 style={{ margin: 0 }}>Latest dramas</h2><Link className="muted" href="/dramas">View all →</Link></div>
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 14 }}>{latest.map(d => <DramaCard key={d.id} drama={d} />)}</div>
       {!latest.length && <p className="muted">No dramas published yet — add some from the admin panel.</p>}
