@@ -7,7 +7,20 @@ export const metadata: Metadata = {
   title: { default: "DramaHub — Free Drama Streaming", template: "%s | DramaHub" },
   description: "Watch dramas and episodes online for free.",
   robots: { index: true, follow: true },
-  openGraph: { type: "website", siteName: "DramaHub", title: "DramaHub — Free Drama Streaming", description: "Watch dramas and episodes online for free." }
+  alternates: { canonical: siteUrl("/") },
+  openGraph: {
+    type: "website",
+    siteName: "DramaHub",
+    title: "DramaHub — Free Drama Streaming",
+    description: "Watch dramas and episodes online for free.",
+    url: siteUrl("/"),
+    locale: "en_US"
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "DramaHub — Free Drama Streaming",
+    description: "Watch dramas and episodes online for free."
+  }
 };
 
 export const viewport: Viewport = {
