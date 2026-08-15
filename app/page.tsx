@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import SiteHeader from "@/components/SiteHeader";
 import DramaCard from "@/components/DramaCard";
 import HeroCarousel, { HeroSlide } from "@/components/HeroCarousel";
+import { description as toPlainText } from "@/lib/html";
 
 export default async function Home() {
   const [heroDramas, latest] = await Promise.all([
@@ -21,7 +22,7 @@ export default async function Home() {
   const slides: HeroSlide[] = heroDramas.map(d => ({
     slug: d.slug,
     title: d.title,
-    description: d.description,
+    description: toPlainText(d.description, 200),
     posterUrl: d.posterUrl,
     bannerUrl: d.bannerUrl,
     genreName: d.genre?.name || null,
