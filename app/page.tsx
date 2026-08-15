@@ -1,9 +1,15 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import SiteHeader from "@/components/SiteHeader";
 import DramaCard from "@/components/DramaCard";
 import HeroCarousel, { HeroSlide } from "@/components/HeroCarousel";
 import { description as toPlainText } from "@/lib/html";
+import { siteUrl, safeJsonLd } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  alternates: { canonical: siteUrl("/") }
+};
 
 export default async function Home() {
   const [heroDramas, latest] = await Promise.all([
@@ -30,7 +36,20 @@ export default async function Home() {
     firstEpisodeId: d.episodes[0]?.id ?? null
   }));
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "DramaHub",
+    url: siteUrl("/"),
+    potentialAction: {
+      "@type": "SearchAction",
+      target: { "@type": "EntryPoint", urlTemplate: siteUrl("/search?q={search_term_string}") },
+      "query-input": "required name=search_term_string"
+    }
+  };
+
   return <main>
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
     <SiteHeader />
     <HeroCarousel slides={slides} />
     <section className="container" style={{ padding: "35px 0 60px" }}>
