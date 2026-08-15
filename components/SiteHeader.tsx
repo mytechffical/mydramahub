@@ -1,5 +1,1 @@
-export function formatCount(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-  return String(n);
-}
+import { prisma } from "@/lib/prisma"; import HeaderNav from "./HeaderNav"; export default async function SiteHeader() { const genres = await prisma.genre.findMany({ where: { dramas: { some: { status: "PUBLISHED" } } }, orderBy: { name: "asc" }, select: { name: true, slug: true } }); return <HeaderNav genres={genres} />; }
