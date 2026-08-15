@@ -47,7 +47,7 @@ export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       <div className="hero-overlay" />
       <div className="container hero-content">
         <div className="hero-poster-wrap">
-          {s.posterUrl ? <img src={s.posterUrl} alt={s.title} className="hero-poster" /> : <div className="hero-poster" />}
+          {s.posterUrl ? <img src={s.posterUrl} alt={s.title} className="hero-poster" fetchPriority="high" loading="eager" /> : <div className="hero-poster" />}
           {s.genreName && <span className="hero-badge">{s.genreName}</span>}
         </div>
         <div className="hero-info">
