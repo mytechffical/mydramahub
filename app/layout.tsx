@@ -30,6 +30,8 @@ export const viewport: Viewport = {
   themeColor: "#050505"
 };
 
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("dh-theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><head><script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /></head><body>{children}</body></html>;
 }
