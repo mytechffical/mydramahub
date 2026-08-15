@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { sanitizeHtml } from "@/lib/html";
 
 type Ep = {
@@ -8,18 +8,6 @@ type Ep = {
   videoUrl: string | null; hlsUrl: string | null; thumbnailUrl: string | null; subtitleUrl: string | null;
 };
 
-// A "direct" video is a link to an actual playable file/stream (.mp4, .m3u8, etc).
-// Anything else (StreamTape, DoodStream, Mixdrop, VOE, YouTube, etc.) is an "embed"
-// link meant to be loaded inside an iframe with its own player built in.
-function isDirectFile(url: string) {
-  return /\.(mp4|webm|ogv|ogg|mov|m3u8|mkv)(\?|#|$)/i.test(url);
-}
-function getVideoKind(ep: Ep): "hls" | "file" | "embed" | "none" {
-  if (ep.hlsUrl && isDirectFile(ep.hlsUrl)) return "hls";
-  if (ep.videoUrl && isDirectFile(ep.videoUrl)) return "file";
-  if (ep.hlsUrl || ep.videoUrl) return "embed";
-  return "none";
-}
 function getEmbedUrl(ep: Ep) {
   return ep.videoUrl || ep.hlsUrl || "";
 }
@@ -31,6 +19,7 @@ export default function ReelsFeed({ dramaTitle, dramaSlug, episodes, startId }:
   const [activeId, setActiveId] = useState(startId);
   const [muted, setMuted] = useState(true);
   const [showHint, setShowHint] = useState(true);
+  const [embedIds, setEmbedIds] = useState<Set<number>>(new Set());
   const countedViews = useRef<Set<number>>(new Set([startId]));
 
   // Scroll instantly to the requested episode on first load, without a smooth animation.
@@ -81,10 +70,13 @@ export default function ReelsFeed({ dramaTitle, dramaSlug, episodes, startId }:
     else slideRefs.current.delete(id);
   }, []);
 
+  const markAsEmbed = useCallback((id: number) => {
+    setEmbedIds(prev => { if (prev.has(id)) return prev; const next = new Set(prev); next.add(id); return next; });
+  }, []);
+
   const activeIndex = episodes.findIndex(e => e.id === activeId);
   const hasNext = activeIndex >= 0 && activeIndex < episodes.length - 1;
-  const activeEp = episodes[activeIndex];
-  const activeIsEmbed = activeEp ? getVideoKind(activeEp) === "embed" : false;
+  const activeIsEmbed = embedIds.has(activeId);
 
   const goTo = (id: number) => {
     const el = slideRefs.current.get(id);
@@ -113,37 +105,41 @@ export default function ReelsFeed({ dramaTitle, dramaSlug, episodes, startId }:
           registerSlide={registerSlide}
           onSelectEpisode={goTo}
           showHint={showHint && ep.id === activeId && hasNext}
+          isEmbed={embedIds.has(ep.id)}
+          markAsEmbed={markAsEmbed}
         />
       ))}
     </div>
   );
 }
 
-function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, registerSlide, onSelectEpisode, showHint }:
+function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, registerSlide, onSelectEpisode, showHint, isEmbed, markAsEmbed }:
   {
     ep: Ep; dramaTitle: string; dramaSlug: string; episodes: Ep[];
     isActive: boolean; muted: boolean;
     registerSlide: (id: number, el: HTMLDivElement | null) => void;
     onSelectEpisode: (id: number) => void; showHint: boolean;
+    isEmbed: boolean; markAsEmbed: (id: number) => void;
   }) {
-  const kind = useMemo(() => getVideoKind(ep), [ep]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const attachedRef = useRef(false);
   const hlsRef = useRef<any>(null);
   const [paused, setPaused] = useState(true);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState(kind === "none" ? "Video is not available yet." : "");
-  // Once the user has scrolled to an embed slide at least once, keep it mounted so
+  const [error, setError] = useState(!ep.videoUrl && !ep.hlsUrl ? "Video is not available yet." : "");
+  // Once we've shown the iframe fallback for this slide at least once, keep it mounted so
   // scrolling back to it doesn't reload the third-party player from scratch.
   const [embedLoaded, setEmbedLoaded] = useState(false);
-  useEffect(() => { if (isActive && kind === "embed") setEmbedLoaded(true); }, [isActive, kind]);
+  useEffect(() => { if (isActive && isEmbed) setEmbedLoaded(true); }, [isActive, isEmbed]);
 
-  // Attach the video source lazily, the first time this slide becomes active, and leave it
-  // attached for the lifetime of the page (scrolling away only pauses it, see below) so
-  // scrolling back to a previous episode resumes instantly instead of re-buffering.
+  // Try to play the link as a real video first — this is exactly how it worked before the
+  // reels update, so anything that played then still plays the same way now. Only links that
+  // truly are third-party embed pages (not real video files) will fail here and fall back
+  // to the iframe box below.
   useEffect(() => {
-    if (kind === "none" || kind === "embed") return;
+    if (isEmbed) return;
+    if (!ep.videoUrl && !ep.hlsUrl) return;
     if (!isActive || attachedRef.current) return;
     attachedRef.current = true;
     const v = videoRef.current;
@@ -152,21 +148,33 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
     const key = `dh-progress-${ep.id}`;
     const restore = () => { const saved = Number(localStorage.getItem(key) || 0); if (saved > 5 && saved < (v.duration - 5)) v.currentTime = saved; };
     const save = () => { localStorage.setItem(key, String(Math.floor(v.currentTime))); if (v.duration) setProgress((v.currentTime / v.duration) * 100); };
+    const onVideoError = () => {
+      if (cancelled) return;
+      // The link isn't a directly playable video file — fall back to showing it in an iframe.
+      hlsRef.current?.destroy();
+      markAsEmbed(ep.id);
+    };
     v.addEventListener("loadedmetadata", restore, { once: true });
     v.addEventListener("timeupdate", save);
+    v.addEventListener("error", onVideoError);
     (async () => {
       try {
-        if (kind === "hls" && ep.hlsUrl && v.canPlayType("application/vnd.apple.mpegurl")) v.src = ep.hlsUrl;
-        else if (kind === "hls" && ep.hlsUrl) {
+        if (ep.hlsUrl && v.canPlayType("application/vnd.apple.mpegurl")) v.src = ep.hlsUrl;
+        else if (ep.hlsUrl) {
           const { default: Hls } = await import("hls.js");
           if (cancelled) return;
-          if (Hls.isSupported()) { const hls = new Hls({ enableWorker: true }); hlsRef.current = hls; hls.loadSource(ep.hlsUrl); hls.attachMedia(v); hls.on(Hls.Events.ERROR, (_: any, data: any) => { if (data?.fatal) setError("Stream unavailable."); }); }
-          else if (ep.videoUrl) v.src = ep.videoUrl; else setError("Browser cannot play this stream.");
-        } else if (ep.videoUrl) v.src = ep.videoUrl; else setError("Video is not available yet.");
-      } catch { if (!cancelled) { if (ep.videoUrl) v.src = ep.videoUrl; else setError("Video could not be loaded."); } }
+          if (Hls.isSupported()) {
+            const hls = new Hls({ enableWorker: true });
+            hlsRef.current = hls;
+            hls.loadSource(ep.hlsUrl);
+            hls.attachMedia(v);
+            hls.on(Hls.Events.ERROR, (_: any, data: any) => { if (data?.fatal) { hls.destroy(); markAsEmbed(ep.id); } });
+          } else if (ep.videoUrl) v.src = ep.videoUrl; else onVideoError();
+        } else if (ep.videoUrl) v.src = ep.videoUrl; else onVideoError();
+      } catch { if (!cancelled) { if (ep.videoUrl && v.src !== ep.videoUrl) v.src = ep.videoUrl; else onVideoError(); } }
     })();
     return () => { cancelled = true; };
-  }, [isActive, ep, kind]);
+  }, [isActive, ep, isEmbed, markAsEmbed]);
 
   // Only tear the stream down when this slide truly unmounts (leaving the watch page),
   // not on every active/inactive toggle while scrolling.
@@ -177,12 +185,12 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
 
   // Play/pause as this slide becomes the active one while scrolling, like a reels feed.
   useEffect(() => {
-    if (kind === "none" || kind === "embed") return;
+    if (isEmbed) return;
     const v = videoRef.current;
     if (!v) return;
     if (isActive) { v.play().then(() => setPaused(false)).catch(() => setPaused(true)); }
     else { v.pause(); setPaused(true); }
-  }, [isActive, kind]);
+  }, [isActive, isEmbed]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -190,7 +198,7 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
   }, [muted]);
 
   const togglePlay = () => {
-    if (kind === "none" || kind === "embed") return;
+    if (isEmbed) return;
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) { v.play().then(() => setPaused(false)).catch(() => {}); }
@@ -199,7 +207,7 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
 
   return (
     <div className="reel-slide" data-ep-id={ep.id} ref={(el) => { wrapRef.current = el; registerSlide(ep.id, el); }}>
-      {(kind === "hls" || kind === "file") && (
+      {!isEmbed && (ep.videoUrl || ep.hlsUrl) && (
         <>
           <div className="reel-progress"><div className="reel-progress-bar" style={{ width: `${progress}%` }} /></div>
           <video
@@ -222,7 +230,7 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
           )}
         </>
       )}
-      {kind === "embed" && (
+      {isEmbed && (
         embedLoaded ? (
           <iframe
             src={isActive ? getEmbedUrl(ep) : undefined}
@@ -238,7 +246,7 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
             : <div className="reel-video" />
         )
       )}
-      {error && kind !== "embed" && <div className="reel-center-play" style={{ color: "#fff", fontWeight: 700, textAlign: "center", padding: 20 }}>{error}</div>}
+      {error && !isEmbed && <div className="reel-center-play" style={{ color: "#fff", fontWeight: 700, textAlign: "center", padding: 20 }}>{error}</div>}
       {showHint && <div className="reel-hint"><span style={{ fontSize: 20 }}>↑</span>Next episode</div>}
       <div className="reel-bottom">
         <Link href={`/drama/${dramaSlug}`} className="reel-drama-link">{dramaTitle}</Link>
@@ -255,4 +263,3 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
     </div>
   );
 }
-
