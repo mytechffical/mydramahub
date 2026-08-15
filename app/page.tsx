@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import SiteHeader from "@/components/SiteHeader";
 import DramaCard from "@/components/DramaCard";
 
-export const dynamic = "force-dynamic";
-
 export default async function Home() {
   const [featured, latest] = await Promise.all([
     prisma.drama.findFirst({ where:{status:"PUBLISHED",featured:true}, include:{genre:true} }),
@@ -13,7 +11,7 @@ export default async function Home() {
   return <main>
     <SiteHeader />
     <section className="hero">
-      <div className="container" style={{padding:"70px 0"}}>
+      <div className="container" style={{padding:"clamp(32px,8vw,70px) 0"}}>
         <p style={{color:"#e50914",fontWeight:900,textTransform:"uppercase"}}>Free streaming</p>
         <h1 style={{fontSize:"clamp(38px,7vw,72px)",maxWidth:760,margin:"8px 0",fontWeight:950}}>{featured?.title || "Watch dramas for free."}</h1>
         <p className="muted" style={{maxWidth:680,lineHeight:1.8}}>{featured ? "Watch the latest episodes with a simple, fast and free streaming experience." : "Build your library from the admin panel and publish dramas here."}</p>
