@@ -72,7 +72,7 @@ export default async function DramaPage({params}:{params:Promise<{slug:string}>}
         </div>
         <div className="space-y-2" style={{marginTop:16}}>
           {d.episodes.map(e=><Link key={e.id} href={`/watch/${e.id}`} className="card row" style={{padding:14,gap:14}}>
-            <b style={{width:40,height:40,display:"grid",placeItems:"center",background:"#222",borderRadius:8,flexShrink:0}}>{e.number}</b>
+            <b style={{width:40,height:40,display:"grid",placeItems:"center",background:"#222",color:"#fff",borderRadius:8,flexShrink:0}}>{e.number}</b>
             <div style={{minWidth:0}}><b>{e.title}</b><div className="muted" style={{fontSize:12,marginTop:4}}>{e.duration!=null?`${Math.floor(e.duration/60)} min`:"Episode"}</div></div>
             <span style={{marginLeft:"auto",flexShrink:0}}>▶</span>
           </Link>)}
