@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 type Genre = { name: string; slug: string };
 
@@ -53,6 +54,8 @@ export default function HeaderNav({ genres }: { genres: Genre[] }) {
             )}
           </div>
         </nav>
+
+        <ThemeToggle />
 
         <button type="button" className="menu-btn" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(o => !o)}>
           <span style={{ transform: menuOpen ? "translateY(6px) rotate(45deg)" : "none" }} />
