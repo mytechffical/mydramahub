@@ -1,12 +1,28 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { sanitizeHtml } from "@/lib/html";
 
 type Ep = {
   id: number; number: number; title: string; description: string;
   videoUrl: string | null; hlsUrl: string | null; thumbnailUrl: string | null; subtitleUrl: string | null;
 };
+
+// A "direct" video is a link to an actual playable file/stream (.mp4, .m3u8, etc).
+// Anything else (StreamTape, DoodStream, Mixdrop, VOE, YouTube, etc.) is an "embed"
+// link meant to be loaded inside an iframe with its own player built in.
+function isDirectFile(url: string) {
+  return /\.(mp4|webm|ogv|ogg|mov|m3u8|mkv)(\?|#|$)/i.test(url);
+}
+function getVideoKind(ep: Ep): "hls" | "file" | "embed" | "none" {
+  if (ep.hlsUrl && isDirectFile(ep.hlsUrl)) return "hls";
+  if (ep.videoUrl && isDirectFile(ep.videoUrl)) return "file";
+  if (ep.hlsUrl || ep.videoUrl) return "embed";
+  return "none";
+}
+function getEmbedUrl(ep: Ep) {
+  return ep.videoUrl || ep.hlsUrl || "";
+}
 
 export default function ReelsFeed({ dramaTitle, dramaSlug, episodes, startId }:
   { dramaTitle: string; dramaSlug: string; episodes: Ep[]; startId: number }) {
@@ -67,6 +83,8 @@ export default function ReelsFeed({ dramaTitle, dramaSlug, episodes, startId }:
 
   const activeIndex = episodes.findIndex(e => e.id === activeId);
   const hasNext = activeIndex >= 0 && activeIndex < episodes.length - 1;
+  const activeEp = episodes[activeIndex];
+  const activeIsEmbed = activeEp ? getVideoKind(activeEp) === "embed" : false;
 
   const goTo = (id: number) => {
     const el = slideRefs.current.get(id);
@@ -77,9 +95,11 @@ export default function ReelsFeed({ dramaTitle, dramaSlug, episodes, startId }:
     <div className="reels" ref={containerRef}>
       <div className="reel-top">
         <Link href={`/drama/${dramaSlug}`} className="reel-back" aria-label="Back to drama">←</Link>
-        <button type="button" className="reel-mute" onClick={() => setMuted(m => !m)} aria-label={muted ? "Unmute" : "Mute"}>
-          {muted ? "🔇" : "🔊"}
-        </button>
+        {!activeIsEmbed && (
+          <button type="button" className="reel-mute" onClick={() => setMuted(m => !m)} aria-label={muted ? "Unmute" : "Mute"}>
+            {muted ? "🔇" : "🔊"}
+          </button>
+        )}
       </div>
       {episodes.map(ep => (
         <ReelSlide
@@ -106,18 +126,24 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
     registerSlide: (id: number, el: HTMLDivElement | null) => void;
     onSelectEpisode: (id: number) => void; showHint: boolean;
   }) {
+  const kind = useMemo(() => getVideoKind(ep), [ep]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const attachedRef = useRef(false);
   const hlsRef = useRef<any>(null);
   const [paused, setPaused] = useState(true);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(kind === "none" ? "Video is not available yet." : "");
+  // Once the user has scrolled to an embed slide at least once, keep it mounted so
+  // scrolling back to it doesn't reload the third-party player from scratch.
+  const [embedLoaded, setEmbedLoaded] = useState(false);
+  useEffect(() => { if (isActive && kind === "embed") setEmbedLoaded(true); }, [isActive, kind]);
 
   // Attach the video source lazily, the first time this slide becomes active, and leave it
   // attached for the lifetime of the page (scrolling away only pauses it, see below) so
   // scrolling back to a previous episode resumes instantly instead of re-buffering.
   useEffect(() => {
+    if (kind === "none" || kind === "embed") return;
     if (!isActive || attachedRef.current) return;
     attachedRef.current = true;
     const v = videoRef.current;
@@ -130,8 +156,8 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
     v.addEventListener("timeupdate", save);
     (async () => {
       try {
-        if (ep.hlsUrl && v.canPlayType("application/vnd.apple.mpegurl")) v.src = ep.hlsUrl;
-        else if (ep.hlsUrl) {
+        if (kind === "hls" && ep.hlsUrl && v.canPlayType("application/vnd.apple.mpegurl")) v.src = ep.hlsUrl;
+        else if (kind === "hls" && ep.hlsUrl) {
           const { default: Hls } = await import("hls.js");
           if (cancelled) return;
           if (Hls.isSupported()) { const hls = new Hls({ enableWorker: true }); hlsRef.current = hls; hls.loadSource(ep.hlsUrl); hls.attachMedia(v); hls.on(Hls.Events.ERROR, (_: any, data: any) => { if (data?.fatal) setError("Stream unavailable."); }); }
@@ -140,7 +166,7 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
       } catch { if (!cancelled) { if (ep.videoUrl) v.src = ep.videoUrl; else setError("Video could not be loaded."); } }
     })();
     return () => { cancelled = true; };
-  }, [isActive, ep]);
+  }, [isActive, ep, kind]);
 
   // Only tear the stream down when this slide truly unmounts (leaving the watch page),
   // not on every active/inactive toggle while scrolling.
@@ -151,11 +177,12 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
 
   // Play/pause as this slide becomes the active one while scrolling, like a reels feed.
   useEffect(() => {
+    if (kind === "none" || kind === "embed") return;
     const v = videoRef.current;
     if (!v) return;
     if (isActive) { v.play().then(() => setPaused(false)).catch(() => setPaused(true)); }
     else { v.pause(); setPaused(true); }
-  }, [isActive]);
+  }, [isActive, kind]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -163,6 +190,7 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
   }, [muted]);
 
   const togglePlay = () => {
+    if (kind === "none" || kind === "embed") return;
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) { v.play().then(() => setPaused(false)).catch(() => {}); }
@@ -171,26 +199,46 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
 
   return (
     <div className="reel-slide" data-ep-id={ep.id} ref={(el) => { wrapRef.current = el; registerSlide(ep.id, el); }}>
-      <div className="reel-progress"><div className="reel-progress-bar" style={{ width: `${progress}%` }} /></div>
-      <video
-        ref={videoRef}
-        className="reel-video"
-        playsInline
-        muted={muted}
-        loop={false}
-        preload="none"
-        poster={ep.thumbnailUrl || undefined}
-        onClick={togglePlay}
-        onEnded={() => { const next = episodes[episodes.findIndex(e => e.id === ep.id) + 1]; if (next) onSelectEpisode(next.id); }}
-      >
-        {ep.subtitleUrl && <track kind="subtitles" src={ep.subtitleUrl} srcLang="en" label="English" default />}
-      </video>
-      {paused && isActive && !error && (
-        <button type="button" className="reel-center-play" onClick={togglePlay} aria-label="Play">
-          <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
-        </button>
+      {(kind === "hls" || kind === "file") && (
+        <>
+          <div className="reel-progress"><div className="reel-progress-bar" style={{ width: `${progress}%` }} /></div>
+          <video
+            ref={videoRef}
+            className="reel-video"
+            playsInline
+            muted={muted}
+            loop={false}
+            preload="none"
+            poster={ep.thumbnailUrl || undefined}
+            onClick={togglePlay}
+            onEnded={() => { const next = episodes[episodes.findIndex(e => e.id === ep.id) + 1]; if (next) onSelectEpisode(next.id); }}
+          >
+            {ep.subtitleUrl && <track kind="subtitles" src={ep.subtitleUrl} srcLang="en" label="English" default />}
+          </video>
+          {paused && isActive && !error && (
+            <button type="button" className="reel-center-play" onClick={togglePlay} aria-label="Play">
+              <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+          )}
+        </>
       )}
-      {error && <div className="reel-center-play" style={{ color: "#fff", fontWeight: 700, textAlign: "center", padding: 20 }}>{error}</div>}
+      {kind === "embed" && (
+        embedLoaded ? (
+          <iframe
+            src={isActive ? getEmbedUrl(ep) : undefined}
+            className="reel-video"
+            style={{ border: 0 }}
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          ep.thumbnailUrl
+            ? <img src={ep.thumbnailUrl} alt="" className="reel-video" style={{ objectFit: "cover" }} />
+            : <div className="reel-video" />
+        )
+      )}
+      {error && kind !== "embed" && <div className="reel-center-play" style={{ color: "#fff", fontWeight: 700, textAlign: "center", padding: 20 }}>{error}</div>}
       {showHint && <div className="reel-hint"><span style={{ fontSize: 20 }}>↑</span>Next episode</div>}
       <div className="reel-bottom">
         <Link href={`/drama/${dramaSlug}`} className="reel-drama-link">{dramaTitle}</Link>
@@ -207,3 +255,4 @@ function ReelSlide({ ep, dramaTitle, dramaSlug, episodes, isActive, muted, regis
     </div>
   );
 }
+
